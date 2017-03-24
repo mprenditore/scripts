@@ -9,7 +9,7 @@
 """AWsShit
 
 Usage:
-    awshit.py list (instances | security_groups | network_interfaces | host_zones) [options]
+    awshit.py list (instances | security_groups | network_interfaces | host_zones | custom_images | subnets) [options]
     awshit.py create (instance | security_group | network_interface | record_set) [options] [-a <amiId>] [-t <instType>] [-s <secDiskSize>] [-H <hostname>] [-d <domain>] [--subnet <subnet>] [--privip <privateIP>] [--sgroup <secGroup>] [--ahostzoneid <ahostzoneId>] [--ptrhostzoneid <ptrhostzoneId>]
     awshit.py add-dns (instance) [options] [-H <hostname>] [-d <domain>] [--privip <privateIP>] [--ahostzoneid <ahostzoneId>] [--ptrhostzoneid <ptrhostzoneId>]
     awshit.py (-h | --help)
@@ -50,6 +50,13 @@ def list_instances():
         print i.id, '-', name, '-', i.state['Name']
 
 
+def list_subnets():
+    for sn in ec2.subnets.all():
+        if sn.tags:
+            name = get_name(sn) or 'No Name'
+            print sn.id, '-', name
+
+
 def list_security_groups():
     for sg in ec2.security_groups.all():
         vpc_name = ec2.Vpc(sg.vpc_id).tags[0]['Value']
@@ -63,6 +70,11 @@ def list_network_interfaces():
         if name != "AWS Behaviur":
             name = get_name(ec2.Instance(ni.attachment['InstanceId'])) or "AWS Behaviur"
         print ni.id, '-', ni.subnet.id, '(', ni.subnet.tags[0]['Value'], ')', '-', ni.private_ip_address, '-', name
+
+
+def list_custom_images():
+    for im in ec2.images.filter(DryRun=False, Owners=['self']):
+        print im.image_id, '-', im.image_location.split('/')[1]
 
 
 def list_host_zones():
@@ -203,6 +215,10 @@ def handleList(arguments):
             list_network_interfaces()
         if 'host_zones' in arguments:
             list_host_zones()
+        if 'custom_images' in arguments:
+            list_custom_images()
+        if 'subnets' in arguments:
+            list_subnets()
     print
 
 
