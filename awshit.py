@@ -54,7 +54,7 @@ def list_subnets():
     for sn in ec2.subnets.all():
         if sn.tags:
             name = get_name(sn) or 'No Name'
-            print sn.id, '-', name
+            print sn.id, '-', name, '-', sn.cidr_block
 
 
 def list_security_groups():
