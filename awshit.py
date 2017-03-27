@@ -10,8 +10,8 @@
 
 Usage:
     awshit.py list (instances | security_groups | network_interfaces | host_zones | custom_images | subnets) [options]
-    awshit.py create (instance | security_group | network_interface | record_set) [options] [-a <amiId>] [-t <instType>] [-s <secDiskSize>] [-H <hostname>] [-d <domain>] [--subnet <subnet>] [--privip <privateIP>] [--sgroup <secGroup>] [--ahostzoneid <ahostzoneId>] [--ptrhostzoneid <ptrhostzoneId>]
-    awshit.py add-dns (instance) [options] [-H <hostname>] [-d <domain>] [--privip <privateIP>] [--ahostzoneid <ahostzoneId>] [--ptrhostzoneid <ptrhostzoneId>]
+    awshit.py create (instance | security_group | network_interface | record_set) [options] [-a <amiId>] [-t <instType>] [-s <secDiskSize>] [-H <hostname>] [-d <domain>] [--subnet <subnet>] [--privip <privateIP>] [--sgroup <secGroup>] [--ahz <ahostzoneId>] [--ptrhz <ptrhostzoneId>]
+    awshit.py add-dns (instance) [options] [-H <hostname>] [-d <domain>] [--privip <privateIP>] [--ahz <ahostzoneId>] [--ptrhz <ptrhostzoneId>]
     awshit.py (-h | --help)
 
 Option:
@@ -21,21 +21,44 @@ Option:
     -s, --size <secDiskSize>     Secondary Disk size
     -H, --hostname <hostname>    Hostname (short)
     -d, --domain <domain>        Domain name
-    --ahostzoneid <hostzoneId>   HostZone Id for A record
-    --ptrhostzoneid <hostzoneId> HostZone Id for PTR record
+    --ahz <hostzoneId>           HostZone Id for A record
+    --ptrhz <hostzoneId>         HostZone Id for PTR record
     --subnet <subnet>            Subnet
     --sgroup <secGroup>          Security Group
     --privip <privateIP>         Private IP
 Options:
-    --profile <profileName>      Profile Name saved on ~/.aws/conf
-    --region <regionName>        Region Name to work on
+    --profile <profileName>      Profile Name saved on ~/.aws/conf [default: default]
+    --region <regionName>        Region Name to work on [default: eu-central-1]
 
 """
 from docopt import docopt
 import boto3
 import ipaddress
+import botocore.errorfactory
 
 
+def check_required(data, args):
+    required_map = {'--ami': 'Ami Id',
+                    '--domain': 'Domain',
+                    '--hostname': 'Hostname',
+                    '--ahz': 'HostZone Id for A record',
+                    '--ptrhz': 'HostZone Id for PTR record',
+                    '--sgroup': 'Security Group',
+                    '--privip': 'Private IP',
+                    '--subnet': 'Subnet',
+                    '--type': 'Instance Type'}
+    for k in args:
+        if k in required_map and data.get(k) is None:
+            while True:
+                data[k] = raw_input("Insert value of '%s': " % required_map.get(k))
+                if len(data[k]) > 0:
+                    break
+                else:
+                    print "Empty Value, retry, you'll be more lucky!"
+    return data
+
+
+# Search inside the TAG array if there is a dict with key "Name" and return the "Value"
 def get_name(res):
     n = [x.get('Value') for x in res.tags if x.get('Key') == 'Name']
     if len(n) >= 1:
@@ -83,16 +106,10 @@ def list_host_zones():
 
 
 def create_instance(data):
-    required = {'--ami': 'Ami Id', '--domain': 'Domain', '--hostname': 'Hostname', '--ahostzoneid': 'HostZone Id for A record', '--ptrhostzoneid': 'HostZone Id for PTR record', '--sgroup': 'Security Group',
-            '--privip': 'Private IP', '--subnet': 'Subnet', '--type': 'Instance Type'}
-    for k, v in required.items():
-        if data.get(k) is None:
-            while True:
-                data[k] = raw_input("Insert value of '%s': " % v)
-                if len(data[k]) > 0:
-                    break
-                else:
-                    print "Empty Value, retry, you'll be more lucky!"
+    required = ['--ami', '--domain', '--hostname', '--ahz', '--ptrhz',
+                '--sgroup', '--privip', '--subnet', '--type']
+    data = check_required(data, required)
+
     ami = data.get('--ami')
     domain = data.get('--domain')
     hostname = data.get('--hostname')
@@ -147,25 +164,19 @@ manage_etc_hosts: true""" % (hostname, hostname, domain))
 
 
 def add_instanceDNS(data):
-    required = {'--domain': 'Domain', '--hostname': 'Hostname', '--ahostzoneid': 'HostZone Id for A record', '--ptrhostzoneid': 'HostZone Id for PTR record', '--privip': 'Private IP'}
-    for k, v in required.items():
-        if data.get(k) is None:
-            while True:
-                data[k] = raw_input("Insert value of '%s': " % v)
-                if len(data[k]) > 0:
-                    break
-                else:
-                    print "Empty Value, retry, you'll be more lucky!"
+    required = ['--domain', '--hostname', '--ahz', '--ptrhz', '--privip']
+    data = check_required(data, required)
+
     domain = data.get('--domain')
     hostname = data.get('--hostname')
-    ahostzoneId = data.get('--ahostzoneid')
-    ptrhostzoneId = data.get('--ptrhostzoneid')
+    ahz = data.get('--ahz')
+    ptrhz = data.get('--ptrhz')
     privip = data.get('--privip')
     fqdn = '.'.join([hostname, domain])
 
     ptr = ipaddress.ip_address(unicode(privip)).reverse_pointer
-    addSimpleRecord('A', ahostzoneId, fqdn, privip)
-    addSimpleRecord('PTR', ptrhostzoneId, ptr, fqdn)
+    addSimpleRecord('A', ahz, fqdn, privip)
+    addSimpleRecord('PTR', ptrhz, ptr, fqdn)
     print "Host DNS Updated"
 
 
@@ -193,8 +204,9 @@ def addSimpleRecord(rtype, hostzoneId, rname, rvalue):
                 ]
             }
         )
-    except Exception as e:
-        print "Something went wrong: ", e
+    # except Exception as e:
+    except botocore.errorfactory.ClientError as e:
+        print "# ERROR #: ", e
 
 
 def cleanUp(arguments):
@@ -219,18 +231,12 @@ def handleList(arguments):
             list_custom_images()
         if 'subnets' in arguments:
             list_subnets()
-    print
 
 
 def handleCreate(arguments):
     if 'create' in arguments:
         if 'instance' in arguments:
             create_instance(arguments)
-        # if 'security_group' in arguments:
-            # create_security_group()
-        # if 'network_interface' in arguments:
-            # create_network_interface()
-    print
 
 
 def handleDNS(arguments):
@@ -238,35 +244,9 @@ def handleDNS(arguments):
         if 'instance' in arguments:
             add_instanceDNS(arguments)
 
-# def handleVm(arguments):
-    # if 'start' in arguments:
-        # manageVm(arguments.get('<vmname>'), 'start')
-        # exit(0)
-    # if 'stop' in arguments:
-        # manageVm(arguments.get('<vmname>'), 'stop')
-        # exit(0)
-    # if 'reboot' in arguments:
-        # manageVm(arguments.get('<vmname>'), 'reboot')
-        # exit(0)
-
-
-# def handleMisc(arguments):
-    # if 'reset' in arguments:
-        # reset_vpn(to=arguments.get('<vpn>'))
-        # exit(0)
-
 
 if __name__ == "__main__":
     arguments = cleanUp(docopt(__doc__, version='1.0'))
-    required = {'--profile': 'Profile Name', '--region': 'Region Name'}
-    for k, v in required.items():
-        if arguments.get(k) is None:
-            while True:
-                arguments[k] = raw_input("Insert value of '%s': " % v)
-                if len(arguments[k]) > 0:
-                    break
-                else:
-                    print "Empty Value, retry, you'll be more lucky!"
     profile_name = arguments.get('--profile')
     region_name = arguments.get('--region')
     session = boto3.Session(profile_name=profile_name)
@@ -276,5 +256,3 @@ if __name__ == "__main__":
     handleList(arguments)
     handleCreate(arguments)
     handleDNS(arguments)
-    # handleVm(arguments)
-    # handleMisc(arguments)
