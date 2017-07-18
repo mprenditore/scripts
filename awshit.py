@@ -84,15 +84,17 @@ def list_security_groups():
     for sg in ec2.security_groups.all():
         vpc_name = ec2.Vpc(sg.vpc_id).tags[0]['Value']
         if(vpc_name != "DO NOT REMOVE- EVER!"):
-            print sg.id, '-', ec2.Vpc(sg.vpc_id).tags[0]['Value'], '-', sg.tags[0]['Value']
+            sg_name = sg.tags[0]['Value'] if sg.tags is not None else "NoNameOnAWS"
+            print sg.id, '-', ec2.Vpc(sg.vpc_id).tags[0]['Value'], '-', sg_name
 
 
 def list_network_interfaces():
     for ni in ec2.network_interfaces.all():
-        name = ni.attachment.get('InstanceId', "AWS Behaviur")
-        if name != "AWS Behaviur":
-            name = get_name(ec2.Instance(ni.attachment['InstanceId'])) or "AWS Behaviur"
-        print ni.id, '-', ni.subnet.id, '(', ni.subnet.tags[0]['Value'], ')', '-', ni.private_ip_address, '-', name
+        if ni.attachment is not None:
+            name = ni.attachment.get('InstanceId', "AWS Behaviur")
+            if name != "AWS Behaviur":
+                name = get_name(ec2.Instance(ni.attachment['InstanceId'])) or "AWS Behaviur"
+            print ni.id, '-', ni.subnet.id, '(', ni.subnet.tags[0]['Value'], ')', '-', ni.private_ip_address, '-', name
 
 
 def list_custom_images():
