@@ -94,7 +94,9 @@ def list_network_interfaces():
             name = ni.attachment.get('InstanceId', "AWS Behaviur")
             if name != "AWS Behaviur":
                 name = get_name(ec2.Instance(ni.attachment['InstanceId'])) or "AWS Behaviur"
-            print ni.id, '-', ni.subnet.id, '(', ni.subnet.tags[0]['Value'], ')', '-', ni.private_ip_address, '-', name
+        else:
+            name = "DETACHED"
+        print ni.id, '-', ni.subnet.id, '(', ni.subnet.tags[0]['Value'], ')', '-', ni.private_ip_address, '-', name
 
 
 def list_custom_images():
